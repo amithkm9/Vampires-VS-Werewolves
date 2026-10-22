@@ -15,6 +15,7 @@ from vampires_ai.game.rules import (
     combine_actions,
     merge_selected_actions,
     generate_multi_source_actions,
+    canonicalize_action,
 )
 
 def test_are_adjacent():
@@ -528,3 +529,88 @@ def test_generate_multi_source_actions():
         len({move.source for move in action.moves}) == 2
         for action in actions
     )
+
+def test_generate_multi_source_actions_no_own_units():
+    state = GameState.from_dict(
+        width=3,
+        height=3,
+        board={
+            (1, 1): Cell(Species.WEREWOLF, 3),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    actions = generate_multi_source_actions(state)
+
+    assert actions == []
+
+def test_generate_multi_source_actions_no_source_destination_conflict():
+    state = GameState.from_dict(
+        width=4,
+        height=3,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 1),
+            (2, 1): Cell(Species.VAMPIRE, 1),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    actions = generate_multi_source_actions(state)
+
+    for action in actions:
+        sources = {move.source for move in action.moves}
+        destinations = {move.destination for move in action.moves}
+
+        assert sources.isdisjoint(destinations)
+
+def test_generate_multi_source_actions_no_duplicates():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 1),
+            (3, 3): Cell(Species.VAMPIRE, 1),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    actions = generate_multi_source_actions(state)
+
+    assert len(actions) == len(set(actions))
+
+def test_canonicalize_action_order_independent():
+    action_a = TurnAction(
+        moves=(
+            Move((1, 1), (1, 2), 1),
+            Move((3, 3), (3, 4), 1),
+        )
+    )
+
+    action_b = TurnAction(
+        moves=(
+            Move((3, 3), (3, 4), 1),
+            Move((1, 1), (1, 2), 1),
+        )
+    )
+
+    assert action_a != action_b
+
+    assert canonicalize_action(action_a) == canonicalize_action(action_b)
+
+def test_generate_multi_source_actions_are_canonical():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 1),
+            (3, 3): Cell(Species.VAMPIRE, 1),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    actions = generate_multi_source_actions(state)
+
+    assert actions
+
+    for action in actions:
+        assert action == canonicalize_action(action)

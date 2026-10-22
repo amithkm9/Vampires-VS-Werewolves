@@ -352,6 +352,20 @@ def group_actions_by_source(
 
     return grouped
 
+def canonicalize_action(action: TurnAction) -> TurnAction:
+    sorted_moves = tuple(
+        sorted(
+            action.moves,
+            key=lambda move: (
+                move.source,
+                move.destination,
+                move.count,
+            ),
+        )
+    )
+
+    return TurnAction(moves=sorted_moves)
+
 def generate_multi_source_actions(
         state: GameState,
 ) -> list[TurnAction]:
@@ -385,6 +399,7 @@ def generate_multi_source_actions(
         merged = merge_selected_actions(state, selected)
 
         if merged is not None:
-            results.add(merged)
+            canonical_action = canonicalize_action(merged)
+            results.add(canonical_action)
 
     return list(results)
