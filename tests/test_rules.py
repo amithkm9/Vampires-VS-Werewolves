@@ -614,3 +614,49 @@ def test_generate_multi_source_actions_are_canonical():
 
     for action in actions:
         assert action == canonicalize_action(action)
+
+def test_generate_multi_source_actions_includes_split():
+    state = GameState.from_dict(
+        width=3,
+        height=3,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 3),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    expected = TurnAction(
+        moves=(
+            Move((1, 1), (1, 2), 1),
+            Move((1, 1), (2, 1), 2),
+        )
+    )
+
+    actions = generate_multi_source_actions(state)
+
+    assert canonicalize_action(expected) in actions
+
+def test_generate_multi_source_actions_two_sources_split():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 3),
+            (3, 3): Cell(Species.VAMPIRE, 3),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    expected = TurnAction(
+        moves=(
+            Move((1, 1), (1, 2), 1),
+            Move((1, 1), (2, 1), 2),
+            Move((3, 3), (3, 4), 1),
+            Move((3, 3), (4, 3), 2),
+        )
+    )
+
+    actions = generate_multi_source_actions(state)
+    print("Generated actions:", len(actions))
+
+    assert canonicalize_action(expected) in actions
