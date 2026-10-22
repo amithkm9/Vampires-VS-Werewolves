@@ -19,3 +19,6 @@ dist/
 
 # VSCode
 .vscode
+
+# Experiment, could be deleted later
+experiment.py
