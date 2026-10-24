@@ -22,3 +22,8 @@ dist/
 
 # Experiment, could be deleted later
 experiment.py
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
