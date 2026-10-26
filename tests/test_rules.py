@@ -2,8 +2,8 @@ from vampires_ai.game.state import GameState, Cell, Species
 from vampires_ai.game.move import Move, TurnAction
 
 from vampires_ai.game.rules import (
-    are_adjacent, 
-    is_within_bounds, 
+    are_adjacent,
+    is_within_bounds,
     belongs_to_current_player,
     has_sufficient_population,
     has_no_source_destination_conflict,

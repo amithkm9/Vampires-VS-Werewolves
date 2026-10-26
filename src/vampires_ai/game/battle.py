@@ -71,7 +71,7 @@ class BattleResult:
 
         if type(self.survivors) is not int:
             raise TypeError("Survivors must be an integer")
-        
+
         if self.survivors < 0:
             raise ValueError("Survivors cannot be negative")
 
@@ -95,7 +95,7 @@ def simulate_survivors(
     # Validate the probability type before checking its range.
     if type(survival_probability) not in (int, float):
             raise TypeError("Survival probability must be numeric")
-    
+
     # this can also check NaN (Not a Number, float type) and reject it correctly
     # nan_value = float("nan")
     # nan_value == nan_value # False
@@ -111,7 +111,7 @@ def simulate_survivors(
 
     if len(random_numbers) != population:
         raise ValueError("Number of random values must match population")
-    
+
     survivors = 0
 
     for random_number in random_numbers:
@@ -122,7 +122,7 @@ def simulate_survivors(
         # this can also check NaN (Not a Number, float type) and reject it correctly
         if not 0 <= random_number < 1:
             raise ValueError("Random number must be in [0, 1)")
-    
+
         if unit_survives(survival_probability, random_number):
             survivors += 1
 
@@ -182,7 +182,7 @@ def expected_survivors(
         raise ValueError(
             "Survival probability must be between 0 and 1"
         )
-    
+
     return population * survival_probability
 
 def resolve_guaranteed_human_conversion(
