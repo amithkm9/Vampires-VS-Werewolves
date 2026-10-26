@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+
+# Testing
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode
+
+# Experiment, could be deleted later
+experiment.py
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
