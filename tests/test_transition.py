@@ -1,10 +1,14 @@
 import pytest
 
+from unittest.mock import patch
+
 from vampires_ai.game.state import GameState, Cell
 from vampires_ai.game.move import Move
 from vampires_ai.game.state import Species
+from vampires_ai.game.battle import BattleResult, HumanBattleResult
 
 from vampires_ai.game.transition import apply_move
+from vampires_ai.game.battle import resolve_battle, resolve_human_battle
 
 def test_apply_move_to_empty_cell():
     state = GameState.from_dict(
@@ -111,8 +115,7 @@ def test_apply_move_insufficient_population():
     with pytest.raises(ValueError, match="Illegal move") as error:
         apply_move(state, move)
 
-# TODO: adjust this test after supporting combat
-def test_apply_move_reject_enemy_destination():
+def test_apply_move_calls_resolve_battle():
     state = GameState.from_dict(
         width=5,
         height=5,
@@ -129,15 +132,26 @@ def test_apply_move_reject_enemy_destination():
         count=5,
     )
 
-    # Verify that apply_move raises ValueError
-    with pytest.raises(ValueError) as error:
-        apply_move(state, move)
+    fake_result = BattleResult(
+        attacker_wins=True,
+        survivors=3,
+    )
 
-    # with message "Combat is not supported yet"
-    assert str(error.value) == "Combat is not supported yet"
+    # Interaction Testing
+    with patch(
+        "vampires_ai.game.transition.resolve_battle",
+        return_value=fake_result,
+    ) as mock_battle:
+        new_state = apply_move(state, move)
 
-# TODO: adjust this test after supporting attacking human
-def test_apply_move_rejects_human_destination():
+    mock_battle.assert_called_once_with(
+        attackers=5,
+        defenders=5,
+    )
+
+    assert new_state.get_cell(2, 1) == Cell(Species.VAMPIRE, 3)
+
+def test_apply_move_calls_resolve_human_battle():
     state = GameState.from_dict(
         width=5,
         height=5,
@@ -154,9 +168,26 @@ def test_apply_move_rejects_human_destination():
         count=5,
     )
 
-    # Verify that combat is rejected
-    with pytest.raises(ValueError, match="Combat is not supported yet"):
-        apply_move(state, move)
+    fake_result = HumanBattleResult(
+        attacker_wins=True,
+        surviving_attackers=5,
+        converted_humans=4,
+        surviving_humans=0,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_human_battle",
+        return_value=fake_result,
+    ) as mock_battle:
+        new_state = apply_move(state, move)
+
+    mock_battle.assert_called_once_with(
+        attackers=5,
+        humans=4,
+    )
+
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 3)
+    assert new_state.get_cell(2, 1) == Cell(Species.VAMPIRE, 9)
 
 def test_apply_move_preserves_unaffected_cells():
     state = GameState.from_dict(
@@ -248,3 +279,354 @@ def test_apply_move_returns_new_state():
 
     # Verify that height remains unchanged - Immutability
     assert new_state.height == state.height
+
+def test_apply_move_monster_battle_attacker_wins():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.WEREWOLF, 6),
+        },
+        current_player=Species.VAMPIRE
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = BattleResult(
+        attacker_wins=True,
+        survivors=3,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Source loses the 5 attacking Vampires
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Attackers win and occupy the destination
+    assert new_state.get_cell(2, 1) == Cell(Species.VAMPIRE, 3)
+
+    # Original state remains unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.WEREWOLF, 6)
+
+def test_apply_move_monster_battle_defender_wins():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.WEREWOLF, 6),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = BattleResult(
+        attacker_wins=False,
+        survivors=2,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Check source after battle
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+    # Check destination after defender victory
+    assert new_state.get_cell(2, 1) == Cell(Species.WEREWOLF, 2)
+
+    # Check original state
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.WEREWOLF, 6)
+
+def test_apply_move_monster_battle_zero_survivors():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.WEREWOLF, 6),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = BattleResult(
+        attacker_wins=True,
+        survivors=0,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Source loses 5 vampires
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Destination becomes empty
+    assert new_state.get_cell(2, 1) is None
+
+    # Original state remains unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.WEREWOLF, 6)
+
+def test_apply_move_monster_battle_defender_zero_survivors():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.WEREWOLF, 6),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = BattleResult(
+        attacker_wins=False,
+        survivors=0,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Verify source
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Verify destination is empty
+    assert new_state.get_cell(2, 1) is None
+
+    # Verify original state is unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.WEREWOLF, 6)
+
+def test_apply_move_human_battle_guaranteed_conversion():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.HUMAN, 4),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = HumanBattleResult(
+        attacker_wins=True,
+        surviving_attackers=5,
+        converted_humans=4,
+        surviving_humans=0,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_human_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Source after battle
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Destination after conversion
+    assert new_state.get_cell(2, 1) == Cell(Species.VAMPIRE, 9)
+
+    # Original state remains unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.HUMAN, 4)
+
+def test_apply_move_human_battle_defender_wins():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.HUMAN, 8),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = HumanBattleResult(
+        attacker_wins=False,
+        surviving_attackers=0,
+        converted_humans=0,
+        surviving_humans=3,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_human_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Source after battle
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Destination after Humans win
+    assert new_state.get_cell(2, 1) == Cell(Species.HUMAN, 3)
+
+    # Original state remains unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.HUMAN, 8)
+
+def test_apply_move_human_battle_defender_zero_survivors():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.HUMAN, 8),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = HumanBattleResult(
+        attacker_wins=False,
+        surviving_attackers=0,
+        converted_humans=0,
+        surviving_humans=0,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_human_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Verify source
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Verify destination is empty
+    assert new_state.get_cell(2, 1) is None
+
+    # Verify original state is unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.HUMAN, 8)
+
+def test_apply_move_human_battle_attacker_zero_survivors():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.HUMAN, 8),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = HumanBattleResult(
+        attacker_wins=True,
+        surviving_attackers=0,
+        converted_humans=0,
+        surviving_humans=0,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_human_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Source after battle
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Destination becomes empty
+    assert new_state.get_cell(2, 1) is None
+
+    # Original state remains unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.HUMAN, 8)
+
+def test_apply_move_human_battle_only_converted_humans_survive():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+            (2, 1): Cell(Species.HUMAN, 8),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move = Move(
+        source=(1, 1),
+        destination=(2, 1),
+        count=5,
+    )
+
+    fake_result = HumanBattleResult(
+        attacker_wins=True,
+        surviving_attackers=0,
+        converted_humans=3,
+        surviving_humans=0,
+    )
+
+    with patch(
+        "vampires_ai.game.transition.resolve_human_battle",
+        return_value=fake_result,
+    ):
+        new_state = apply_move(state, move)
+
+    # Verify source after battle
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+
+    # Verify destination contains converted Vampires
+    assert new_state.get_cell(2, 1) == Cell(Species.VAMPIRE, 3)
+
+    # Verify original state remains unchanged
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) == Cell(Species.HUMAN, 8)

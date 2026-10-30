@@ -1,13 +1,21 @@
-from vampires_ai.game.state import GameState, Cell
+from vampires_ai.game.battle import resolve_battle, resolve_human_battle
 from vampires_ai.game.move import Move, TurnAction
-
 from vampires_ai.game.rules import is_legal_action
+from vampires_ai.game.state import Cell, GameState, Species
+
 
 def apply_move(
         state: GameState,
         move: Move,
 ) -> GameState:
-    """Apply one non-combat move and return a new immutable game state."""
+    """
+    Apply a legal move and return a new game state.
+
+    Handles movement, friendly merging, monster battles,
+    and human battles without modifying the original state.
+
+    The current player remains unchanged.
+    """
 
     action = TurnAction(moves=(move,))
 
@@ -42,8 +50,52 @@ def apply_move(
             species=target_cell.species,
             count=new_count
         )
+    elif target_cell.species == Species.HUMAN:
+        result = resolve_human_battle(
+            attackers=move.count,
+            humans=target_cell.count,
+        )
+
+        if result.attacker_wins:
+            new_count = (
+                result.surviving_attackers
+                + result.converted_humans
+            )
+
+            if new_count == 0:
+                del new_board[move.destination]
+            else:
+                new_board[move.destination] = Cell(
+                    species=source_cell.species,
+                    count=new_count,
+                )
+        else:
+            if result.surviving_humans == 0:
+                del new_board[move.destination]
+            else:
+                new_board[move.destination] = Cell(
+                    species=target_cell.species,
+                    count=result.surviving_humans
+                )
     else:
-        raise ValueError("Combat is not supported yet")
+        result = resolve_battle(
+            attackers=move.count,
+            defenders=target_cell.count,
+        )
+
+        if result.survivors == 0:
+            del new_board[move.destination]
+
+        elif result.attacker_wins:
+            new_board[move.destination] = Cell(
+                species=source_cell.species,
+                count=result.survivors,
+            )
+        else:
+            new_board[move.destination] = Cell(
+                species=target_cell.species,
+                count=result.survivors,
+            )
 
     # Return a new GameState
     return GameState.from_dict(
