@@ -104,3 +104,32 @@ def apply_move(
         board=new_board,
         current_player=state.current_player,
     )
+
+def apply_turn(
+        state: GameState,
+        action: TurnAction,
+) -> GameState:
+    """Apply a complete turn and switch the current player."""
+
+    if not is_legal_action(state, action):
+        raise ValueError("Illegal turn action")
+
+    new_state = state
+
+    # Execute all moves
+    for move in action.moves:
+        new_state = apply_move(new_state, move)
+
+    # Switch current player
+    next_play = (
+        Species.WEREWOLF
+        if state.current_player == Species.VAMPIRE
+        else Species.VAMPIRE
+    )
+
+    return GameState(
+        width=new_state.width,
+        height=new_state.height,
+        board=new_state.board,
+        current_player=next_play,
+    )
