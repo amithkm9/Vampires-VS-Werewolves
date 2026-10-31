@@ -425,3 +425,212 @@ def test_apply_turn_resolves_guaranteed_human_battle():
     assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
     assert state.get_cell(2, 1) == Cell(Species.HUMAN, 3)
     assert state.current_player == Species.VAMPIRE
+
+def test_apply_turn_combines_attackers_before_monster_battle():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 5),
+            (3, 3): Cell(Species.VAMPIRE, 5),
+            (2, 2): Cell(Species.WEREWOLF, 4),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    action = TurnAction(
+        moves=(
+            Move((1, 1), (2, 2), 3),
+            Move((3, 3), (2, 2), 4),
+        )
+    )
+
+    new_state = apply_turn(state, action)
+
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 2)
+    assert new_state.get_cell(3, 3) == Cell(Species.VAMPIRE, 1)
+    assert new_state.get_cell(2, 2) == Cell(Species.VAMPIRE, 7)
+    assert new_state.current_player == Species.WEREWOLF
+
+    # Original state must remain unchanged.
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(3, 3) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(2, 2) == Cell(Species.WEREWOLF, 4)
+
+def test_apply_turn_combines_moves_to_empty_destination():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 5),
+            (3, 3): Cell(Species.VAMPIRE, 5),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    action = TurnAction(
+        moves=(
+            Move((1, 1), (2, 2), 3),
+            Move((3, 3), (2, 2), 4),
+        )
+    )
+
+    new_state = apply_turn(state, action)
+
+    # Both groups arrive at the same empty destination.
+    assert new_state.get_cell(2, 2) == Cell(Species.VAMPIRE, 7)
+
+    # Sources lose only the units they sent.
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 2)
+    assert new_state.get_cell(3, 3) == Cell(Species.VAMPIRE, 1)
+
+    # Player switches after the complete turn.
+    assert new_state.current_player == Species.WEREWOLF
+
+    # Original state remains unchanged.
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(3, 3) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(2, 2) is None
+
+def test_apply_turn_combines_moves_with_friendly_destination():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 5),
+            (3, 3): Cell(Species.VAMPIRE, 5),
+            (2, 2): Cell(Species.VAMPIRE, 2),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    action = TurnAction(
+        moves=(
+            Move((1, 1), (2, 2), 3),
+            Move((3, 3), (2, 2), 4),
+        )
+    )
+
+    new_state = apply_turn(state, action)
+
+    # Both incoming groups merge with existing friendly units.
+    assert new_state.get_cell(2, 2) == Cell(Species.VAMPIRE, 9)
+
+    # Source counts are updated correctly.
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 2)
+    assert new_state.get_cell(3, 3) == Cell(Species.VAMPIRE, 1)
+
+    # Player switches after the complete turn.
+    assert new_state.current_player == Species.WEREWOLF
+
+    # Original state remains unchanged.
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(3, 3) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(2, 2) == Cell(Species.VAMPIRE, 2)
+
+def test_apply_turn_combines_attackers_before_human_battle():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 5),
+            (3, 3): Cell(Species.VAMPIRE, 5),
+            (2, 2): Cell(Species.HUMAN, 6),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    action = TurnAction(
+        moves=(
+            Move((1, 1), (2, 2), 3),
+            Move((3, 3), (2, 2), 4),
+        )
+    )
+
+    new_state = apply_turn(state, action)
+
+    # Combined attackers convert all humans.
+    assert new_state.get_cell(2, 2) == Cell(Species.VAMPIRE, 13)
+
+    # Sources retain their remaining units.
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 2)
+    assert new_state.get_cell(3, 3) == Cell(Species.VAMPIRE, 1)
+
+    # Player switches after the complete turn.
+    assert new_state.current_player == Species.WEREWOLF
+
+    # Original state remains unchanged.
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(3, 3) == Cell(Species.VAMPIRE, 5)
+    assert state.get_cell(2, 2) == Cell(Species.HUMAN, 6)
+
+def test_apply_turn_splits_one_source_across_destinations():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 10),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    action = TurnAction(
+        moves=(
+            Move((1, 1), (2, 1), 3),
+            Move((1, 1), (1, 2), 4),
+        )
+    )
+
+    new_state = apply_turn(state, action)
+
+    # Source loses the total number of moved units.
+    assert new_state.get_cell(1, 1) == Cell(Species.VAMPIRE, 3)
+
+    # Both destinations receive the correct number of units.
+    assert new_state.get_cell(2, 1) == Cell(Species.VAMPIRE, 3)
+    assert new_state.get_cell(1, 2) == Cell(Species.VAMPIRE, 4)
+
+    # Player switches after the complete turn.
+    assert new_state.current_player == Species.WEREWOLF
+
+    # Original state remains unchanged.
+    assert state.get_cell(1, 1) == Cell(Species.VAMPIRE, 10)
+    assert state.get_cell(2, 1) is None
+    assert state.get_cell(1, 2) is None
+
+def test_apply_turn_shared_destination_is_order_independent():
+    state = GameState.from_dict(
+        width=5,
+        height=5,
+        board={
+            (1, 1): Cell(Species.VAMPIRE, 5),
+            (3, 3): Cell(Species.VAMPIRE, 5),
+            (2, 2): Cell(Species.WEREWOLF, 4),
+        },
+        current_player=Species.VAMPIRE,
+    )
+
+    move_a = Move((1, 1), (2, 2), 3)
+    move_b = Move((3, 3), (2, 2), 4)
+
+    action_a = TurnAction(moves=(move_a, move_b))
+    action_b = TurnAction(moves=(move_b, move_a))
+
+    result_a = apply_turn(state, action_a)
+    result_b = apply_turn(state, action_b)
+
+    # Reordering moves to the same destination
+    # must not change the deterministic result.
+    assert result_a == result_b
+
+    assert result_a.get_cell(2, 2) == Cell(
+        Species.VAMPIRE, 7
+    )
+
+    assert result_a.get_cell(1, 1) == Cell(
+        Species.VAMPIRE, 2
+    )
+
+    assert result_a.get_cell(3, 3) == Cell(
+        Species.VAMPIRE, 1
+    )

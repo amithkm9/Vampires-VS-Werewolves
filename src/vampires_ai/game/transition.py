@@ -114,11 +114,101 @@ def apply_turn(
     if not is_legal_action(state, action):
         raise ValueError("Illegal turn action")
 
-    new_state = state
+    # Group moves by destination
+    moves_by_destination = {}
 
-    # Execute all moves
     for move in action.moves:
-        new_state = apply_move(new_state, move)
+        moves_by_destination.setdefault(
+            move.destination, []
+        ).append(move)
+
+    # Create a mutable copy of the original board.
+    new_board = dict(state.board)
+
+    # Process each destination group.
+    for destination, moves in moves_by_destination.items():
+
+        # Total number of units arriving at this destination.
+        total_attackers = sum(move.count for move in moves)
+
+        # Deduct units from each source.
+        for move in moves:
+            source_cell = new_board[move.source]
+
+            remaining = source_cell.count - move.count
+
+            if remaining == 0:
+                del new_board[move.source]
+            else:
+                new_board[move.source] = Cell(
+                    species=source_cell.species,
+                    count=remaining,
+                )
+
+        # Resolve this destination once
+        # using total_attackers.
+        target_cell = new_board.get(destination)
+
+        if target_cell is None:
+            new_board[destination] = Cell(
+                species=state.current_player,
+                count=total_attackers
+            )
+        elif target_cell.species == state.current_player:
+            new_board[destination] = Cell(
+                species=state.current_player,
+                count=target_cell.count + total_attackers,
+            )
+        # Monster Battle
+        elif target_cell.species != Species.HUMAN:
+            result = resolve_battle(
+                attackers=total_attackers,
+                defenders=target_cell.count,
+            )
+
+            if result.survivors == 0:
+                del new_board[destination]
+
+            elif result.attacker_wins:
+                new_board[destination] = Cell(
+                    species=state.current_player,
+                    count=result.survivors,
+                )
+
+            else:
+                new_board[destination] = Cell(
+                    species=target_cell.species,
+                    count=result.survivors,
+                )
+        # Human Battle
+        elif target_cell.species == Species.HUMAN:
+            result = resolve_human_battle(
+                attackers=total_attackers,
+                humans=target_cell.count,
+            )
+
+            if result.attacker_wins:
+                new_count = (
+                    result.surviving_attackers
+                    + result.converted_humans
+                )
+
+                if new_count == 0:
+                    del new_board[destination]
+                else:
+                    new_board[destination] = Cell(
+                        species=state.current_player,
+                        count=new_count,
+                    )
+
+            else:
+                if result.surviving_humans == 0:
+                    del new_board[destination]
+                else:
+                    new_board[destination] = Cell(
+                        species=Species.HUMAN,
+                        count=result.surviving_humans,
+                    )
 
     # Switch current player
     next_play = (
@@ -127,9 +217,9 @@ def apply_turn(
         else Species.VAMPIRE
     )
 
-    return GameState(
-        width=new_state.width,
-        height=new_state.height,
-        board=new_state.board,
+    return GameState.from_dict(
+        width=state.width,
+        height=state.height,
+        board=new_board,
         current_player=next_play,
     )
