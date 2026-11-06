@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+.DS_Store
+# course material (server binaries, starter kit): not ours to redistribute
+*.zip

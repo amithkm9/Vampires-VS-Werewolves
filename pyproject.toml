@@ -1,0 +1,18 @@
+[project]
+name = "vvw-ai"
+version = "1.0.0"
+description = "Vampires vs Werewolves tournament AI (CentraleSupelec MSc AI - Foundation of AI)"
+requires-python = ">=3.8"
+dependencies = []
+
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+extend-exclude = ["sim/snapshots"]  # frozen earlier versions, kept as-is for regression matches
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM"]
+ignore = ["E501", "UP006", "UP007", "UP035", "UP045", "SIM108"]
+
+[tool.ty.src]
+exclude = ["sim/snapshots"]
